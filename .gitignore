@@ -1,0 +1,38 @@
+# Python bytecode files
+*.pyc
+*.pyo
+__pycache__/
+
+# Virtual environment directory
+venv/
+env/
+*.env
+
+# Logs
+data/logs/
+*.log
+
+# Database files
+*.sqlite3
+*.db
+
+# Backup files
+*~
+*.bak
+*.swp
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# PyCharm specific files
+.idea/
+
+# AWS configuration files
+.aws/
+
+# Temporary files
+*.tmp
