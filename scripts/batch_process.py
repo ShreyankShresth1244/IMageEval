@@ -47,6 +47,15 @@ def process_image(image_file):
     except Exception as e:
         logging.error(f"Error processing {image_file}: {e}")
 
+# batch_process.py
+
+def get_dynamic_batch_size():
+    """
+    Returns the dynamic batch size for processing.
+    """
+    return 5  # or some logic to determine the batch size dynamically
+
+
 def process_images_in_batches_parallel():
     """
     Process images in batches using parallel workers.

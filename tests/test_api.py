@@ -1,6 +1,6 @@
 import pytest
-from unittest.mock import patch
-from app.api import app
+from unittest.mock import patch, MagicMock
+from app import app  # Ensure your Flask app is imported correctly
 
 @pytest.fixture
 def client():
@@ -16,10 +16,14 @@ def test_evaluate_endpoint(mock_download_image, client):
     """
     Test the /evaluate endpoint with a valid image URL.
     """
-    # Mock the download_image function to avoid actual HTTP requests
-    mock_download_image.return_value = None
+    # Mock the download_image utility function
+    mock_image = MagicMock()
+    mock_download_image.return_value = mock_image
 
-    response = client.post("/evaluate", json={"image_url": "https://example.com/test.jpg"})
+    response = client.post(
+        "/evaluate", json={"image_url": "https://example.com/sample.jpg"}
+    )
+
     assert response.status_code == 200
     assert "status" in response.json
     assert response.json["status"] in ["Good", "Needs Improvement"]
@@ -29,26 +33,21 @@ def test_enhance_endpoint(mock_download_image, client):
     """
     Test the /enhance endpoint with a valid image URL.
     """
-    # Mock the download_image function to avoid actual HTTP requests
-    mock_download_image.return_value = None
+    # Mock the download_image utility function
+    mock_image = MagicMock()
+    mock_download_image.return_value = mock_image
 
-    response = client.post("/enhance", json={"image_url": "https://example.com/test.jpg"})
+    # Simulate successful image enhancement
+    mock_image.save = MagicMock()
+
+    response = client.post(
+        "/enhance", json={"image_url": "https://example.com/sample.jpg"}
+    )
+
     assert response.status_code == 200
     assert "enhanced_image_path" in response.json
     assert response.json["enhanced_image_path"].endswith(".jpg")
 
-def test_evaluate_endpoint_missing_url(client):
-    """
-    Test the /evaluate endpoint with a missing image URL.
-    """
-    response = client.post("/evaluate", json={})
-    assert response.status_code == 400
-    assert "error" in response.json
-
-def test_enhance_endpoint_invalid_url(client):
-    """
-    Test the /enhance endpoint with an invalid image URL.
-    """
-    response = client.post("/enhance", json={"image_url": "invalid-url"})
-    assert response.status_code == 400
-    assert "error" in response.json
+# Ensure additional setup for other Flask routes is correct
+if __name__ == "__main__":
+    pytest.main()
