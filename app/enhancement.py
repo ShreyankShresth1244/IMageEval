@@ -1,13 +1,19 @@
+import os
 import cv2
 from PIL import Image
-from rembg import remove
 import numpy as np
 import torch
+from rembg import remove
 from torchvision.transforms import functional as TF
-from models.esrgan import ESRGANModel  # Import from esrgan package
-import os
+from models.esrgan import ESRGANModel
 
-model_path = "./models/esrgan/weights/RRDB_ESRGAN_x4.pth"
+
+def load_esrgan_model(model_path="./models/esrgan/weights/RRDB_ESRGAN_x4.pth"):
+    """
+    Load the ESRGAN model.
+    """
+    return ESRGANModel(model_path)
+
 
 def sharpen_image(image):
     """
@@ -17,22 +23,15 @@ def sharpen_image(image):
     return cv2.filter2D(image, -1, kernel)
 
 
-def replace_background(image_path):
-    """
-    Replace the image background with plain white.
-    """
-    img = Image.open(image_path)
-    bg_removed = remove(img)
-    white_bg = Image.new("RGB", bg_removed.size, (255, 255, 255))
-    white_bg.paste(bg_removed, (0, 0), bg_removed)
-    return white_bg
-
-
-def upscale_image_with_esrgan(image, model_path="./models/esrgan/weights/RRDB_ESRGAN_x4.pth"):
+def upscale_image_with_esrgan(image, model):
     """
     Use the ESRGAN model to upscale the image.
+    Args:
+        image (PIL.Image): The input image to enhance.
+        model: Pre-loaded ESRGAN model.
+    Returns:
+        PIL.Image: The upscaled image.
     """
-    model = ESRGANModel(model_path)
     image_tensor = TF.to_tensor(image).unsqueeze(0)
     with torch.no_grad():
         enhanced_tensor = model(image_tensor)
@@ -40,34 +39,43 @@ def upscale_image_with_esrgan(image, model_path="./models/esrgan/weights/RRDB_ES
     return enhanced_image
 
 
-def enhance_image(image_path, save_path, model_path="./models/esrgan/weights/RRDB_ESRGAN_x4.pth"):
+def enhance_image(image_path, save_path, esrgan_model):
     """
-    Enhance the image by sharpening, upscaling using ESRGAN, and replacing the background.
+    Enhance an image using sharpening, upscaling, and background replacement.
+    Args:
+        image_path (str): Path to the input image.
+        save_path (str): Path to save the enhanced image.
+        esrgan_model: Pre-loaded ESRGAN model.
     """
-    # Check if image exists locally
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"Image not found locally: {image_path}")
 
-    # Read the image using OpenCV (only if it exists locally)
     image = cv2.imread(image_path)
     if image is None:
         raise ValueError("Invalid image path.")
 
-    # Sharpen the image
     sharpened = sharpen_image(image)
+    upscaled = upscale_image_with_esrgan(
+        Image.fromarray(cv2.cvtColor(sharpened, cv2.COLOR_BGR2RGB)),
+        esrgan_model,
+    )
 
-    # Upscale the image using ESRGAN
-    upscaled = upscale_image_with_esrgan(Image.fromarray(cv2.cvtColor(sharpened, cv2.COLOR_BGR2RGB)), model_path)
+    white_bg = replace_background(upscaled)
 
-    # Replace the background of the upscaled image with a white background
-    upscaled_with_white_bg = remove(upscaled)  # Remove background first
-    white_bg = Image.new("RGB", upscaled.size, (255, 255, 255))
-    white_bg.paste(upscaled_with_white_bg, (0, 0), upscaled_with_white_bg)
+    if not os.path.exists(os.path.dirname(save_path)):
+        os.makedirs(os.path.dirname(save_path))
+    white_bg.save(save_path)
 
-    # Save the enhanced image
-    enhanced_path = save_path
-    if not os.path.exists(os.path.dirname(enhanced_path)):
-        os.makedirs(os.path.dirname(enhanced_path))
-    white_bg.save(enhanced_path)
 
-    return enhanced_path
+def replace_background(image):
+    """
+    Replace the background with white for a given image.
+    Args:
+        image (PIL.Image): The input image with possibly a non-uniform background.
+    Returns:
+        PIL.Image: The processed image with a white background.
+    """
+    bg_removed = remove(image)
+    white_bg = Image.new("RGB", bg_removed.size, (255, 255, 255))
+    white_bg.paste(bg_removed, (0, 0), bg_removed)
+    return white_bg

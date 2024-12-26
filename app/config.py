@@ -38,7 +38,7 @@ IMAGE_QUALITY_THRESHOLDS = {
 
 # Batch Processing Configuration
 BATCH_PROCESSING = {
-    "batch_size": 1000,              # Number of images to process in one batch
+    "batch_size": 5,              # Number of images to process in one batch
     "parallel_workers": 4,           # Number of parallel workers for multiprocessing
 }
 
