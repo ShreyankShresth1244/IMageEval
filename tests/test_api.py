@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from app import app  # Ensure your Flask app is imported correctly
+from app import app  # Import the actual Flask app
 
 @pytest.fixture
 def client():
@@ -47,7 +47,3 @@ def test_enhance_endpoint(mock_download_image, client):
     assert response.status_code == 200
     assert "enhanced_image_path" in response.json
     assert response.json["enhanced_image_path"].endswith(".jpg")
-
-# Ensure additional setup for other Flask routes is correct
-if __name__ == "__main__":
-    pytest.main()
