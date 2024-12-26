@@ -58,11 +58,20 @@ def replace_background(image):
     Returns:
         PIL.Image.Image: Image with the background replaced.
     """
+    # Remove the original background
     bg_removed = remove(image)
-    white_bg = Image.new("RGB", bg_removed.size, (255, 255, 255))
-    white_bg.paste(bg_removed, (0, 0), bg_removed)
-    return white_bg
 
+    # Convert the removed background image to 'RGBA' if it's not already
+    if bg_removed.mode != "RGBA":
+        bg_removed = bg_removed.convert("RGBA")
+
+    # Create a new white background (RGB mode)
+    white_bg = Image.new("RGBA", bg_removed.size, (255, 255, 255, 255))  # Use RGBA to handle transparency
+
+    # Paste the background removed image onto the white background
+    white_bg.paste(bg_removed, (0, 0), bg_removed)
+
+    return white_bg
 
 def enhance_image(image_path, save_path, esrgan_model):
     """

@@ -26,30 +26,34 @@ def test_sharpen_image():
 
 
 @patch("app.enhancement.remove")
-def test_replace_background(mock_remove, mock_image):
+def test_replace_background(mock_remove):
     # Mock background removal
-    mock_remove.return_value = mock_image
+    mock_bg_removed = Image.new("RGBA", (100, 100), (255, 255, 255, 0))  # Transparent background
+    mock_remove.return_value = mock_bg_removed
+
     result = replace_background(TEST_IMAGE_PATH)
     assert isinstance(result, Image.Image)
-    assert result.size == mock_image.size
-    assert result.mode == "RGB"
+    assert result.size == mock_bg_removed.size
+    assert result.mode == "RGBA"  # Ensure it's RGBA after background removal
 
 
 @patch("app.enhancement.ESRGANModel")
 @patch("torch.no_grad")
 @patch("app.enhancement.TF.to_tensor")
 @patch("app.enhancement.TF.to_pil_image")
-def test_upscale_image_with_esrgan(mock_to_pil_image, mock_to_tensor, mock_no_grad, mock_esrgan_model, mock_image):
+def test_upscale_image_with_esrgan(mock_to_pil_image, mock_to_tensor, mock_no_grad, mock_esrgan_model):
     # Mock ESRGAN processing
     mock_model = MagicMock()
     mock_esrgan_model.return_value = mock_model
+
     mock_tensor = MagicMock()
     mock_to_tensor.return_value = mock_tensor
-    mock_model.return_value = mock_tensor
-    mock_to_pil_image.return_value = mock_image
 
-    result = upscale_image_with_esrgan(mock_image)
+    mock_to_pil_image.return_value = Image.new("RGB", (200, 200), (0, 0, 0))  # Upscaled image
+
+    result = upscale_image_with_esrgan(Image.new("RGB", (100, 100), (0, 0, 0)), mock_model)
     assert isinstance(result, Image.Image)
+    assert result.size == (200, 200)  # Ensure it's upscaled
 
 
 @patch("os.path.exists")
@@ -67,18 +71,24 @@ def test_enhance_image(
     mock_cv2_read,
     mock_makedirs,
     mock_path_exists,
-    mock_image,
 ):
     # Mock dependencies
     mock_path_exists.return_value = True
-    mock_sharpen.return_value = np.zeros((100, 100, 3), dtype=np.uint8)  # Black image
+    mock_image = Image.new("RGB", (100, 100), (0, 0, 0))
+    mock_sharpen.return_value = np.zeros((100, 100, 3), dtype=np.uint8)  # Sharpened image array
     mock_upscale.return_value = mock_image
     mock_replace_bg.return_value = mock_image
     mock_cv2_read.return_value = np.zeros((100, 100, 3), dtype=np.uint8)
     mock_image_class.fromarray.return_value = mock_image
 
+    # Mock the save method
+    mock_image.save = MagicMock()
+
+    # Mock ESRGAN model
+    mock_esrgan_model = MagicMock()
+
     # Call the function
-    result = enhance_image(TEST_IMAGE_PATH, SAVE_IMAGE_PATH)
+    result = enhance_image(TEST_IMAGE_PATH, SAVE_IMAGE_PATH, mock_esrgan_model)
 
     # Verify outputs
     assert result == SAVE_IMAGE_PATH

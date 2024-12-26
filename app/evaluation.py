@@ -33,7 +33,7 @@ def check_clarity(image, sharpness_threshold=100.0):
     return True, "Clarity OK", laplacian_var
 
 
-def check_background(image_path, tolerance=10, max_unique_colors=10):
+def check_background(image_path, tolerance=10, max_unique_colors=5):
     """
     Check if the image background is plain (e.g., white).
     """
@@ -42,13 +42,16 @@ def check_background(image_path, tolerance=10, max_unique_colors=10):
         bg_removed = remove(img)
         bg_array = np.array(bg_removed.resize((100, 100)))  # Downscale for performance
         unique_colors = len(np.unique(bg_array.reshape(-1, bg_array.shape[2]), axis=0))
+        print(f"[DEBUG] Unique colors detected: {unique_colors}")
 
+        # Adjusted max unique colors threshold for simpler backgrounds
         if unique_colors > max_unique_colors:
             return False, "Complex background"
         return True, "Background OK"
     except Exception as e:
         logging.error(f"Error during background check: {e}")
         return False, "Error checking background"
+
 
 
 def evaluate_image(image_path, min_resolution=(1024, 1024), sharpness_threshold=100.0):

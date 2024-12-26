@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from batch_process import process_images_in_batches_parallel, process_image
+from scripts.batch_process import process_images_in_batches_parallel, process_image
 from app.evaluation import evaluate_image, check_resolution, check_clarity, check_background
 import logging
 
@@ -68,8 +68,8 @@ def test_evaluate_image_invalid(mock_image_paths):
 
 
 # Batch processing test
-@patch("batch_process.process_image")  # Assuming batch_process module has process_image
-@patch("batch_process.ThreadPoolExecutor.map")  # Patch ThreadPoolExecutor's map method
+@patch("scripts.batch_process.process_image")  # Correct path for process_image usage
+@patch("scripts.batch_process.ThreadPoolExecutor.map")  # Correct path for ThreadPoolExecutor.map usage
 def test_process_images_in_batches_parallel(mock_map, mock_process_image):
     """
     Validate parallel image batch processing using mocks.
@@ -81,8 +81,8 @@ def test_process_images_in_batches_parallel(mock_map, mock_process_image):
     mock_model = MagicMock(name="ESRGANModel")
 
     # Adjust process_images_in_batches_parallel to take mock_batch_data and mock_model
-    with patch("batch_process.get_batches", return_value=[mock_batch_data]), \
-            patch("batch_process.load_esrgan_model", return_value=mock_model):
+    with patch("scripts.batch_process.get_batches", return_value=[mock_batch_data]), \
+            patch("scripts.batch_process.load_esrgan_model", return_value=mock_model):
         try:
             process_images_in_batches_parallel()  # Call the actual function
             logging.info("Parallel batch processing executed successfully.")
