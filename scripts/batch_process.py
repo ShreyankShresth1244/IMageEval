@@ -1,5 +1,6 @@
 import os
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from app.evaluation import evaluate_image
 from app.enhancement import enhance_image, load_esrgan_model
@@ -7,8 +8,6 @@ from app.config import STORAGE_PATHS, BATCH_PROCESSING
 from app.database import get_db_connection
 import psutil
 import json
-
-logging.info(f"Memory usage before enhancement: {psutil.virtual_memory().used / (1024 ** 3):.2f} GB")
 
 # Configure logging
 logging.basicConfig(
@@ -23,25 +22,12 @@ logging.basicConfig(
 def get_batches(image_list, batch_size=2):
     """
     Split the list of images into smaller batches.
-    Args:
-        image_list (list): List of image file names.
-        batch_size (int): Number of images in each batch.
-    Returns:
-        list: A list of batches, where each batch is a list of image file names.
     """
     return [image_list[i:i + batch_size] for i in range(0, len(image_list), batch_size)]
 
 def get_original_url(image_file, conn):
     """
     Get the original URL of the image from the `products` table if available.
-    If not, return the absolute local path of the image.
-
-    Args:
-        image_file (str): File name of the image.
-        conn: Active database connection.
-
-    Returns:
-        str: The original URL (image_url1) or the absolute local path of the image.
     """
     try:
         with conn.cursor() as cursor:
@@ -49,28 +35,18 @@ def get_original_url(image_file, conn):
                 """
                 SELECT image_url1 FROM products WHERE image_url1 LIKE %s
                 """,
-                (f"%{image_file}%",)  # Match the image name in the URL
+                (f"%{image_file}%",)
             )
             result = cursor.fetchone()
             if result and result[0]:
-                return result[0]  # Return the original URL from image_url1
+                return result[0]
     except Exception as e:
         logging.error(f"Error fetching original URL for {image_file}: {e}")
-
-    # Fallback to local path if URL not found
     return os.path.abspath(os.path.join(STORAGE_PATHS["original"], image_file))
-
 
 def save_to_database(conn, original_url, enhanced_path, evaluation_status, issues_detected):
     """
     Save the image details to the database.
-
-    Args:
-        conn: Active database connection.
-        original_url (str): URL of the original image.
-        enhanced_path (str): Path to the enhanced image.
-        evaluation_status (str): Evaluation status (e.g., "Good", "Needs Improvement").
-        issues_detected (list): List detailing issues found in the image.
     """
     try:
         with conn.cursor() as cursor:
@@ -86,15 +62,9 @@ def save_to_database(conn, original_url, enhanced_path, evaluation_status, issue
     except Exception as e:
         logging.error(f"Error saving to database: {e}")
 
-
 def process_image(image_file, esrgan_model, conn):
     """
     Process a single image: Evaluate and enhance if needed, and save details to the database.
-
-    Args:
-        image_file (str): File name of the image to process.
-        esrgan_model: Preloaded ESRGAN model for upscaling.
-        conn: Active database connection.
     """
     image_path = os.path.join(STORAGE_PATHS["original"], image_file)
     enhanced_path = os.path.join(STORAGE_PATHS["enhanced"], image_file)
@@ -127,10 +97,23 @@ def process_image(image_file, esrgan_model, conn):
     except Exception as e:
         logging.error(f"Error processing {image_file}: {e}")
 
+def measure_performance(func):
+    """
+    Decorator to measure performance of a function.
+    """
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        logging.info(f"Performance: {func.__name__} took {elapsed_time:.2f} seconds")
+        return result
+    return wrapper
 
+@measure_performance
 def process_images_in_batches_parallel():
     """
-    Process images in batches using parallel workers.
+    Process images in batches using parallel workers, measuring performance.
     """
     original_images = [
         f for f in os.listdir(STORAGE_PATHS["original"])
@@ -142,7 +125,7 @@ def process_images_in_batches_parallel():
         return
 
     batch_size = BATCH_PROCESSING["batch_size"]
-    parallel_workers = min(2, BATCH_PROCESSING["parallel_workers"])  # Cap workers to 2
+    parallel_workers = min(2, BATCH_PROCESSING["parallel_workers"])
 
     # Load the ESRGAN model once before batch processing
     logging.info("Loading ESRGAN model...")
@@ -153,22 +136,21 @@ def process_images_in_batches_parallel():
     conn = get_db_connection()
 
     try:
-        # Get batches using the get_batches function
         batches = get_batches(original_images, batch_size)
-
         for batch_number, batch in enumerate(batches, start=1):
             logging.info(f"Processing batch {batch_number}: {len(batch)} images")
+            batch_start_time = time.time()
 
             with ThreadPoolExecutor(max_workers=parallel_workers) as executor:
                 executor.map(lambda img: process_image(img, esrgan_model, conn), batch)
 
-            logging.info(f"Batch {batch_number} completed.")
+            batch_end_time = time.time()
+            logging.info(f"Batch {batch_number} completed in {batch_end_time - batch_start_time:.2f} seconds.")
     except Exception as e:
         logging.error(f"Critical error during batch processing: {e}")
     finally:
         if conn:
             conn.close()
-
 
 if __name__ == "__main__":
     try:
