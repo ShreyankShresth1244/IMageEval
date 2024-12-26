@@ -25,7 +25,6 @@ def mock_process_batch_data():
     """
     return ["./tests/data/mock_image_1.jpg", "./tests/data/mock_image_2.jpg"]
 
-
 # Evaluate image tests
 @patch("app.evaluation.check_resolution")
 @patch("app.evaluation.check_clarity")
@@ -66,7 +65,6 @@ def test_evaluate_image_invalid(mock_image_paths):
     assert result["status"] == "Invalid Image"
     assert len(result["issues"]) > 0
 
-
 # Batch processing test
 @patch("scripts.batch_process.process_image")  # Correct path for process_image usage
 @patch("scripts.batch_process.ThreadPoolExecutor.map")  # Correct path for ThreadPoolExecutor.map usage
@@ -74,22 +72,20 @@ def test_process_images_in_batches_parallel(mock_map, mock_process_image):
     """
     Validate parallel image batch processing using mocks.
     """
-    mock_process_image.side_effect = lambda img, model: f"Processed {img} with model {model}"
-    mock_map.side_effect = lambda func, iterable: [func(x) for x in iterable]
+    mock_process_image.side_effect = lambda img, model, conn: f"Processed {img} with model {model}"
+    mock_map.side_effect = lambda func, iterable: [func(img) for img in iterable]
 
     mock_batch_data = ['./tests/data/mock_image_1.jpg', './tests/data/mock_image_2.jpg']
     mock_model = MagicMock(name="ESRGANModel")
+    mock_db_connection = MagicMock()
+    mock_db_connection.close.return_value = None
 
-    # Adjust process_images_in_batches_parallel to take mock_batch_data and mock_model
     with patch("scripts.batch_process.get_batches", return_value=[mock_batch_data]), \
-            patch("scripts.batch_process.load_esrgan_model", return_value=mock_model):
-        try:
-            process_images_in_batches_parallel()  # Call the actual function
-            logging.info("Parallel batch processing executed successfully.")
+         patch("scripts.batch_process.load_esrgan_model", return_value=mock_model), \
+         patch("scripts.batch_process.get_db_connection", return_value=mock_db_connection):
+        process_images_in_batches_parallel()
+        logging.info("Parallel batch processing executed successfully.")
 
-            # Assertions
-            mock_map.assert_called_once()
-            assert mock_process_image.call_count == len(mock_batch_data)
-        except Exception as error:
-            logging.error(f"Batch processing test failed: {error}")
-            pytest.fail("Parallel batch image processing failed unexpectedly.")
+        # Assertions
+        mock_map.assert_called_once()
+        assert mock_process_image.call_count == len(mock_batch_data)

@@ -48,7 +48,7 @@ def initialize_tables():
     create_enhanced_images_table_query = """
     CREATE TABLE IF NOT EXISTS enhanced_images (
         id SERIAL PRIMARY KEY,
-        original_image_url TEXT NOT NULL,
+        original_image_url TEXT,
         enhanced_image_url TEXT,
         evaluation_status TEXT,
         issues_detected JSON
