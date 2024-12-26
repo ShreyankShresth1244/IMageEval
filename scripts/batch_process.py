@@ -4,6 +4,10 @@ from concurrent.futures import ThreadPoolExecutor
 from app.evaluation import evaluate_image
 from app.enhancement import enhance_image, load_esrgan_model
 from app.config import STORAGE_PATHS, BATCH_PROCESSING
+import psutil
+
+logging.info(f"Memory usage before enhancement: {psutil.virtual_memory().used / (1024 ** 3):.2f} GB")
+
 
 # Configure logging
 logging.basicConfig(
@@ -14,13 +18,25 @@ logging.basicConfig(
         logging.StreamHandler(),
     ],
 )
+def get_batches(image_list, batch_size=2):
+    """
+    Split the list of images into smaller batches.
+    Args:
+        image_list (list): List of image file names.
+        batch_size (int): Number of images in each batch.
+    Returns:
+        list: A list of batches, where each batch is a list of image file names.
+    """
+    return [image_list[i:i + batch_size] for i in range(0, len(image_list), batch_size)]
+
+
 
 def process_image(image_file, esrgan_model):
     """
     Process a single image: Evaluate and enhance if needed.
     Args:
         image_file (str): File name of the image to process.
-        esrgan_model: Pre-loaded ESRGAN model for upscaling.
+        esrgan_model: Preloaded ESRGAN model for upscaling.
     """
     image_path = os.path.join(STORAGE_PATHS["original"], image_file)
     enhanced_path = os.path.join(STORAGE_PATHS["enhanced"], image_file)
@@ -58,19 +74,23 @@ def process_images_in_batches_parallel():
         return
 
     batch_size = BATCH_PROCESSING["batch_size"]
-    parallel_workers = BATCH_PROCESSING["parallel_workers"]
+    parallel_workers = min(2, BATCH_PROCESSING["parallel_workers"])  # Cap workers to 2
 
     # Load the ESRGAN model once before batch processing
-    esrgan_model = load_esrgan_model()
+    logging.info("Loading ESRGAN model...")
+    esrgan_model = load_esrgan_model("./models/esrgan/weights/RRDB_ESRGAN_x4.pth")
+    logging.info("ESRGAN model loaded successfully.")
 
-    for i in range(0, len(original_images), batch_size):
-        batch = original_images[i:i + batch_size]
-        logging.info(f"Processing batch {i // batch_size + 1}: {len(batch)} images")
+    # Get batches using the get_batches function
+    batches = get_batches(original_images, batch_size)
+
+    for batch_number, batch in enumerate(batches, start=1):
+        logging.info(f"Processing batch {batch_number}: {len(batch)} images")
 
         with ThreadPoolExecutor(max_workers=parallel_workers) as executor:
             executor.map(lambda img: process_image(img, esrgan_model), batch)
 
-        logging.info(f"Batch {i // batch_size + 1} completed.")
+        logging.info(f"Batch {batch_number} completed.")
 
 
 if __name__ == "__main__":

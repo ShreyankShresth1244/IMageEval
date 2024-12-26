@@ -4,11 +4,12 @@ from torchvision.transforms import functional as TF
 from PIL import Image
 import os
 import logging
+from multiprocessing import Pool
 
 from models.esrgan.ESRGAN.RRDBNet_arch import RRDBNet
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Assuming RRDBNet is defined in a separate file or repository  # Adjust the import based on where RRDBNet is defined
 
 class ESRGANModel(nn.Module):
     """
@@ -25,17 +26,17 @@ class ESRGANModel(nn.Module):
         """
         logging.info("Loading ESRGAN model...")
         try:
-            # Define the ESRGAN architecture by importing RRDBNet and passing the necessary arguments
-            model = RRDBNet(in_nc=in_nc, out_nc=out_nc, nf=nf, nb=nb)  # Pass the required parameters
+            # Define the ESRGAN architecture
+            model = RRDBNet(in_nc=in_nc, out_nc=out_nc, nf=nf, nb=nb)
 
             # Load the weights
-            checkpoint = torch.load(weights_path, map_location='cpu')
-            if 'state_dict' in checkpoint:
-                model.load_state_dict(checkpoint['state_dict'])
+            checkpoint = torch.load(weights_path, map_location="cpu")
+            if "state_dict" in checkpoint:
+                model.load_state_dict(checkpoint["state_dict"])
             else:
-                model.load_state_dict(checkpoint)  # If no 'state_dict', load directly
+                model.load_state_dict(checkpoint)
 
-            model.eval()  # Set the model to evaluation mode
+            model.eval()  # Set to evaluation mode
             logging.info("Model loaded successfully.")
             return model
 
@@ -49,10 +50,6 @@ class ESRGANModel(nn.Module):
     def forward(self, x):
         """
         Forward pass for the ESRGAN model.
-        Args:
-            x (torch.Tensor): Input image tensor of shape (N, C, H, W).
-        Returns:
-            torch.Tensor: Super-resolved image tensor.
         """
         return self.model(x)
 
@@ -60,11 +57,6 @@ class ESRGANModel(nn.Module):
 def preprocess_image(image_path, target_size=(256, 256)):
     """
     Preprocess an image for the ESRGAN model.
-    Args:
-        image_path (str): Path to the input image.
-        target_size (tuple): Target size to resize the image to (width, height).
-    Returns:
-        torch.Tensor: Preprocessed image tensor.
     """
     image = Image.open(image_path).convert("RGB")
     image = image.resize(target_size)
@@ -75,47 +67,59 @@ def preprocess_image(image_path, target_size=(256, 256)):
 def postprocess_image(image_tensor, save_path):
     """
     Postprocess the model output and save it as an image.
-    Args:
-        image_tensor (torch.Tensor): Super-resolved image tensor.
-        save_path (str): Path to save the output image.
     """
     enhanced_image = TF.to_pil_image(image_tensor.squeeze(0).clamp(0, 1))
     enhanced_image.save(save_path)
 
 
-def test_esrgan_model(image_path, model_path, save_path):
+def test_esrgan_model(image_path, model_path, save_path, model=None):
     """
     Test the ESRGAN model with a sample image.
-    Args:
-        image_path (str): Path to the input image.
-        model_path (str): Path to the ESRGAN model weights.
-        save_path (str): Path to save the enhanced image.
     """
-    # Check if image and model path exist
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"Input image not found: {image_path}")
-    if not os.path.exists(model_path):
+    if model is None and not os.path.exists(model_path):
         raise FileNotFoundError(f"Model weights not found: {model_path}")
 
-    # Initialize the ESRGAN model
-    model = ESRGANModel(model_path)
+    if model is None:
+        model = ESRGANModel(model_path)
 
-    # Preprocess the image
     input_tensor = preprocess_image(image_path)
 
-    # Perform super-resolution without gradient tracking
-    with torch.no_grad():
-        output_tensor = model(input_tensor)
+    try:
+        with torch.no_grad():
+            output_tensor = model(input_tensor)
 
-    # Postprocess and save the enhanced image
-    postprocess_image(output_tensor, save_path)
-    print(f"Enhanced image saved at {save_path}")
+        postprocess_image(output_tensor, save_path)
+        logging.info(f"Enhanced image saved at {save_path}")
+    except Exception as e:
+        logging.error(f"Failed to process image {image_path}: {e}")
+
+
+def process_image(args):
+    """
+    Helper function for multiprocessing.
+    """
+    image_path, save_path, model_path, model = args
+    try:
+        test_esrgan_model(image_path, model_path, save_path, model)
+    except Exception as e:
+        logging.error(f"Error processing image {image_path}: {e}")
 
 
 if __name__ == "__main__":
-    # Test the ESRGAN model with a sample image
-    image_path = "./data/original/test_image.jpg"  # Path to input image
-    model_path = "./models/esrgan/weights/RRDB_ESRGAN_x4.pth"  # Path to model weights
-    save_path = "./data/enhanced/enhanced_test_image.jpg"  # Path to save enhanced image
+    model_path = "./models/esrgan/weights/RRDB_ESRGAN_x4.pth"
+    model = ESRGANModel(model_path)
 
-    test_esrgan_model(image_path, model_path, save_path)
+    # Define image paths
+    test_images = [
+        ("./data/original/test_image1.jpg", "./data/enhanced/enhanced_test_image1.jpg"),
+        ("./data/original/test_image2.jpg", "./data/enhanced/enhanced_test_image2.jpg"),
+    ]
+
+    # Add model to each argument tuple for multiprocessing
+    args_list = [(img[0], img[1], model_path, model) for img in test_images]
+
+    # Use multiprocessing for batch processing
+    with Pool(processes=4) as pool:
+        pool.map(process_image, args_list)

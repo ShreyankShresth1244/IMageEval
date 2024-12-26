@@ -70,18 +70,26 @@ def test_evaluate_image_invalid(mock_image_paths):
 # Batch processing test
 @patch("batch_process.process_image")  # Assuming batch_process module has process_image
 @patch("batch_process.ThreadPoolExecutor.map")  # Patch ThreadPoolExecutor's map method
-def test_process_images_in_batches_parallel(mock_map, mock_process_image, mock_process_batch_data):
+def test_process_images_in_batches_parallel(mock_map, mock_process_image):
     """
     Validate parallel image batch processing using mocks.
     """
-    mock_process_image.side_effect = lambda x: f"Processed {x}"
+    mock_process_image.side_effect = lambda img, model: f"Processed {img} with model {model}"
     mock_map.side_effect = lambda func, iterable: [func(x) for x in iterable]
 
-    try:
-        process_images_in_batches_parallel()  # Adjust call to use the defined process
-        logging.info("Parallel batch processing executed successfully.")
-        mock_map.assert_called_once()
-        assert mock_process_image.call_count == len(mock_process_batch_data)
-    except Exception as error:
-        logging.error(f"Batch processing test failed: {error}")
-        pytest.fail("Parallel batch image processing failed unexpectedly.")
+    mock_batch_data = ['./tests/data/mock_image_1.jpg', './tests/data/mock_image_2.jpg']
+    mock_model = MagicMock(name="ESRGANModel")
+
+    # Adjust process_images_in_batches_parallel to take mock_batch_data and mock_model
+    with patch("batch_process.get_batches", return_value=[mock_batch_data]), \
+            patch("batch_process.load_esrgan_model", return_value=mock_model):
+        try:
+            process_images_in_batches_parallel()  # Call the actual function
+            logging.info("Parallel batch processing executed successfully.")
+
+            # Assertions
+            mock_map.assert_called_once()
+            assert mock_process_image.call_count == len(mock_batch_data)
+        except Exception as error:
+            logging.error(f"Batch processing test failed: {error}")
+            pytest.fail("Parallel batch image processing failed unexpectedly.")
