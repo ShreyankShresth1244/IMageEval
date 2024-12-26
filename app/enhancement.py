@@ -59,8 +59,10 @@ def enhance_image(image_path, save_path, model_path="./models/esrgan/weights/RRD
     # Upscale the image using ESRGAN
     upscaled = upscale_image_with_esrgan(Image.fromarray(cv2.cvtColor(sharpened, cv2.COLOR_BGR2RGB)), model_path)
 
-    # Replace the background with a white background
-    white_bg = replace_background(image_path)
+    # Replace the background of the upscaled image with a white background
+    upscaled_with_white_bg = remove(upscaled)  # Remove background first
+    white_bg = Image.new("RGB", upscaled.size, (255, 255, 255))
+    white_bg.paste(upscaled_with_white_bg, (0, 0), upscaled_with_white_bg)
 
     # Save the enhanced image
     enhanced_path = save_path
