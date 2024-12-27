@@ -30,8 +30,8 @@ IMAGE_QUALITY_THRESHOLDS = {
 
 # Batch Processing Configuration
 BATCH_PROCESSING = {
-    "batch_size": 2,              # Number of images to process in one batch
-    "parallel_workers": 2,           # Number of parallel workers for multiprocessing
+    "batch_size": 4,              # Number of images to process in one batch
+    "parallel_workers": 4,           # Number of parallel workers for multiprocessing
 }
 
 # AWS S3 Configuration (Optional Cloud Storage)

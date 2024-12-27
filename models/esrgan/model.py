@@ -28,7 +28,7 @@ class ESRGANModel(nn.Module):
 
         try:
             model = RRDBNet(in_nc=in_nc, out_nc=out_nc, nf=nf, nb=nb)
-            checkpoint = torch.load(weights_path, map_location=torch.device("cuda"))
+            checkpoint = torch.load(weights_path, map_location=torch.device("cuda"), weights_only=True)
             if "state_dict" in checkpoint:
                 model.load_state_dict(checkpoint["state_dict"])
             else:

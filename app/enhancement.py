@@ -1,3 +1,4 @@
+import logging
 import os
 import numpy as np
 from PIL import Image
@@ -111,24 +112,33 @@ def enhance_image(image_path, save_path, esrgan_model):
     if image is None:
         raise ValueError("Failed to read the image. Invalid image path.")
 
-    # Sharpen the image
-    sharpened = sharpen_image(image)
+    try:
+        # Sharpen the image
+        sharpened = sharpen_image(image)
 
-    # Convert OpenCV image (NumPy array) to PIL Image
-    pil_image = Image.fromarray(cv2.cvtColor(sharpened, cv2.COLOR_BGR2RGB))
+        # Convert OpenCV image (NumPy array) to PIL Image
+        pil_image = Image.fromarray(cv2.cvtColor(sharpened, cv2.COLOR_BGR2RGB))
 
-    # Preprocess small images
-    if pil_image.size[0] < 256 or pil_image.size[1] < 256:
-        pil_image = preprocess_small_image(pil_image)
+        # Preprocess small images
+        if pil_image.size[0] < 256 or pil_image.size[1] < 256:
+            pil_image = preprocess_small_image(pil_image)
 
-    # Upscale the image using ESRGAN
-    upscaled = upscale_image_with_esrgan(pil_image, esrgan_model)
+        # Upscale the image using ESRGAN with mixed precision
+        with torch.no_grad():
+            with torch.amp.autocast("cuda"):
+                upscaled = upscale_image_with_esrgan(pil_image, esrgan_model)
 
-    # Replace the background with plain white
-    enhanced_image = replace_background(upscaled)
+        # Replace the background with plain white
+        enhanced_image = replace_background(upscaled)
 
-    # Save the enhanced image
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    enhanced_image.save(save_path)
+        # Save the enhanced image
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        enhanced_image.save(save_path)
+
+    except Exception as e:
+        logging.error(f"Error during enhancement: {e}")
+        raise
+    finally:
+        torch.cuda.empty_cache()
 
     return save_path

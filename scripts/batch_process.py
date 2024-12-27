@@ -2,6 +2,11 @@ import os
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
+import warnings
+import gc
+from numba import NumbaWarning
+warnings.filterwarnings("ignore", category=FutureWarning, module="torch")
+warnings.filterwarnings("ignore", category=NumbaWarning)
 
 import torch
 
@@ -22,7 +27,7 @@ logging.basicConfig(
     ],
 )
 
-def get_batches(image_list, batch_size=2):
+def get_batches(image_list, batch_size):
     """
     Split the list of images into smaller batches.
     """
@@ -99,6 +104,10 @@ def process_image(image_file, esrgan_model, conn):
         )
     except Exception as e:
         logging.error(f"Error processing {image_file}: {e}")
+    finally:
+        # Clear memory after processing each image
+        gc.collect()
+        torch.cuda.empty_cache()
 
 def measure_performance(func):
     """
@@ -123,21 +132,30 @@ def process_images_in_batches_parallel():
         logging.warning("No images found in the original directory.")
         return
 
-    batch_size = BATCH_PROCESSING["batch_size"]
-    parallel_workers = min(2, BATCH_PROCESSING["parallel_workers"])
+    # Get batch size and parallel workers from config
+    batch_size = BATCH_PROCESSING.get("batch_size", 4)  # Default to 4 if not specified in config
+    parallel_workers = min(2, BATCH_PROCESSING.get("parallel_workers", 2))  # Default to 2 workers if not specified
+
+    logging.info(f"Batch size: {batch_size}, Parallel workers: {parallel_workers}")
 
     logging.info("Loading ESRGAN model...")
+    # Clear memory before loading the model
+    gc.collect()
+    torch.cuda.empty_cache()
     esrgan_model = load_esrgan_model("./models/esrgan/weights/RRDB_ESRGAN_x4.pth").cuda()
+    esrgan_model.half()
     logging.info("ESRGAN model loaded successfully.")
 
     conn = get_db_connection()
 
     try:
         batches = get_batches(original_images, batch_size)
+        total_start_time = time.time()  # Start total processing time tracking
+
         for batch_number, batch in enumerate(batches, start=1):
             logging.info(f"Processing batch {batch_number}: {len(batch)} images")
 
-            # Start timing
+            # Start timing for batch
             start_event = torch.cuda.Event(enable_timing=True)
             end_event = torch.cuda.Event(enable_timing=True)
             start_event.record()
@@ -148,12 +166,20 @@ def process_images_in_batches_parallel():
             end_event.record()
             torch.cuda.synchronize()
             logging.info(f"Batch {batch_number} completed in {start_event.elapsed_time(end_event):.2f} ms.")
+
+            # Clear memory after processing each batch
+            gc.collect()
+            torch.cuda.empty_cache()
+
+        total_end_time = time.time()  # End total processing time tracking
+        total_elapsed_time = total_end_time - total_start_time
+        logging.info(f"Total time taken to process all batches: {total_elapsed_time:.2f} seconds.")
+
     except Exception as e:
         logging.error(f"Critical error during batch processing: {e}")
     finally:
         if conn:
             conn.close()
-
 
 if __name__ == "__main__":
     try:
