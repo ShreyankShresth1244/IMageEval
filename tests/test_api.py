@@ -1,6 +1,8 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from app import app  # Import the actual Flask app
+import torch
+assert torch.cuda.is_available(), "CUDA is not available. Check your GPU setup."
 
 @pytest.fixture
 def client():

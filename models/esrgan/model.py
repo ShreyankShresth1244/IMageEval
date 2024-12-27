@@ -21,55 +21,45 @@ class ESRGANModel(nn.Module):
         self.model = self.load_pretrained_model(weights_path, in_nc, out_nc, nf, nb)
 
     def load_pretrained_model(self, weights_path, in_nc, out_nc, nf, nb):
-        """
-        Load the pre-trained ESRGAN model from the given path.
-        """
         logging.info("Loading ESRGAN model...")
-        try:
-            # Define the ESRGAN architecture
-            model = RRDBNet(in_nc=in_nc, out_nc=out_nc, nf=nf, nb=nb)
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+        start_event.record()
 
-            # Load the weights
-            checkpoint = torch.load(weights_path, map_location="cpu")
+        try:
+            model = RRDBNet(in_nc=in_nc, out_nc=out_nc, nf=nf, nb=nb)
+            checkpoint = torch.load(weights_path, map_location=torch.device("cuda"))
             if "state_dict" in checkpoint:
                 model.load_state_dict(checkpoint["state_dict"])
             else:
                 model.load_state_dict(checkpoint)
+            model = model.cuda()
+            model.eval()
 
-            model.eval()  # Set to evaluation mode
-            logging.info("Model loaded successfully.")
+            end_event.record()
+            torch.cuda.synchronize()
+            logging.info(f"Model loaded and moved to GPU in {start_event.elapsed_time(end_event):.2f} ms")
             return model
-
-        except KeyError as e:
-            logging.error(f"KeyError while loading model: {e}")
-            raise ValueError(f"Error loading model from path: {weights_path}")
         except Exception as e:
             logging.error(f"Failed to load the model: {e}")
             raise ValueError(f"Error loading model from path: {weights_path}")
 
     def forward(self, x):
-        """
-        Forward pass for the ESRGAN model.
-        """
-        return self.model(x)
+        return self.model(x.cuda())  # Move the input tensor to GPU
 
 
 def preprocess_image(image_path, target_size=(256, 256)):
-    """
-    Preprocess an image for the ESRGAN model.
-    """
     image = Image.open(image_path).convert("RGB")
     image = image.resize(target_size)
-    image_tensor = TF.to_tensor(image).unsqueeze(0)
+    image_tensor = TF.to_tensor(image).unsqueeze(0).cuda()  # Move to GPU
     return image_tensor
 
 
+
 def postprocess_image(image_tensor, save_path):
-    """
-    Postprocess the model output and save it as an image.
-    """
-    enhanced_image = TF.to_pil_image(image_tensor.squeeze(0).clamp(0, 1))
+    enhanced_image = TF.to_pil_image(image_tensor.cpu().squeeze(0).clamp(0, 1))  # Move to CPU
     enhanced_image.save(save_path)
+
 
 
 def test_esrgan_model(image_path, model_path, save_path, model=None):

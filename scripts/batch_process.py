@@ -2,6 +2,9 @@ import os
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
+
+import torch
+
 from app.evaluation import evaluate_image
 from app.enhancement import enhance_image, load_esrgan_model
 from app.config import STORAGE_PATHS, BATCH_PROCESSING
@@ -110,11 +113,7 @@ def measure_performance(func):
         return result
     return wrapper
 
-@measure_performance
 def process_images_in_batches_parallel():
-    """
-    Process images in batches using parallel workers, measuring performance.
-    """
     original_images = [
         f for f in os.listdir(STORAGE_PATHS["original"])
         if f.lower().endswith(('.jpg', '.jpeg', '.png'))
@@ -127,30 +126,34 @@ def process_images_in_batches_parallel():
     batch_size = BATCH_PROCESSING["batch_size"]
     parallel_workers = min(2, BATCH_PROCESSING["parallel_workers"])
 
-    # Load the ESRGAN model once before batch processing
     logging.info("Loading ESRGAN model...")
-    esrgan_model = load_esrgan_model("./models/esrgan/weights/RRDB_ESRGAN_x4.pth")
+    esrgan_model = load_esrgan_model("./models/esrgan/weights/RRDB_ESRGAN_x4.pth").cuda()
     logging.info("ESRGAN model loaded successfully.")
 
-    # Establish a single database connection
     conn = get_db_connection()
 
     try:
         batches = get_batches(original_images, batch_size)
         for batch_number, batch in enumerate(batches, start=1):
             logging.info(f"Processing batch {batch_number}: {len(batch)} images")
-            batch_start_time = time.time()
+
+            # Start timing
+            start_event = torch.cuda.Event(enable_timing=True)
+            end_event = torch.cuda.Event(enable_timing=True)
+            start_event.record()
 
             with ThreadPoolExecutor(max_workers=parallel_workers) as executor:
                 executor.map(lambda img: process_image(img, esrgan_model, conn), batch)
 
-            batch_end_time = time.time()
-            logging.info(f"Batch {batch_number} completed in {batch_end_time - batch_start_time:.2f} seconds.")
+            end_event.record()
+            torch.cuda.synchronize()
+            logging.info(f"Batch {batch_number} completed in {start_event.elapsed_time(end_event):.2f} ms.")
     except Exception as e:
         logging.error(f"Critical error during batch processing: {e}")
     finally:
         if conn:
             conn.close()
+
 
 if __name__ == "__main__":
     try:
