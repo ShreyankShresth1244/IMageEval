@@ -143,7 +143,6 @@ def process_images_in_batches_parallel():
     gc.collect()
     torch.cuda.empty_cache()
     esrgan_model = load_esrgan_model("./models/esrgan/weights/RRDB_ESRGAN_x4.pth").cuda()
-    esrgan_model.half()
     logging.info("ESRGAN model loaded successfully.")
 
     conn = get_db_connection()

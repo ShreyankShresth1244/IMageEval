@@ -8,7 +8,6 @@ import torch
 from torchvision.transforms import functional as TF
 from models.esrgan import ESRGANModel
 
-
 def load_esrgan_model(model_path):
     """
     Load and initialize the ESRGAN model once.
@@ -20,7 +19,6 @@ def load_esrgan_model(model_path):
     model = ESRGANModel(model_path)
     return model
 
-
 def preprocess_small_image(image, target_size=(256, 256)):
     """
     Preprocess small images by upscaling them to a minimum size using bicubic interpolation.
@@ -31,8 +29,6 @@ def preprocess_small_image(image, target_size=(256, 256)):
         PIL.Image.Image: Upscaled image.
     """
     return image.resize(target_size, Image.BICUBIC)
-
-
 
 def sharpen_image(image):
     """
@@ -46,7 +42,6 @@ def sharpen_image(image):
         return image  # Skip sharpening for very small images
     kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
     return cv2.filter2D(image, -1, kernel)
-
 
 def upscale_image_with_esrgan(image, model):
     """
@@ -65,7 +60,6 @@ def upscale_image_with_esrgan(image, model):
         enhanced_tensor = model(image_tensor)  # Pass through the ESRGAN model
     enhanced_image = TF.to_pil_image(enhanced_tensor.squeeze(0))
     return enhanced_image
-
 
 def replace_background(image):
     """
@@ -92,8 +86,6 @@ def replace_background(image):
     # Convert back to 'RGB' mode (discard alpha channel)
     return combined.convert("RGB")
 
-
-
 def enhance_image(image_path, save_path, esrgan_model):
     """
     Enhance the image by sharpening, upscaling, and replacing the background.
@@ -113,23 +105,27 @@ def enhance_image(image_path, save_path, esrgan_model):
         raise ValueError("Failed to read the image. Invalid image path.")
 
     try:
-        # Sharpen the image
-        sharpened = sharpen_image(image)
-
         # Convert OpenCV image (NumPy array) to PIL Image
-        pil_image = Image.fromarray(cv2.cvtColor(sharpened, cv2.COLOR_BGR2RGB))
+        pil_image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
 
         # Preprocess small images
         if pil_image.size[0] < 256 or pil_image.size[1] < 256:
             pil_image = preprocess_small_image(pil_image)
 
-        # Upscale the image using ESRGAN with mixed precision
-        with torch.no_grad():
-            with torch.amp.autocast("cuda"):
-                upscaled = upscale_image_with_esrgan(pil_image, esrgan_model)
+        # Sharpen the image
+        sharpened = sharpen_image(np.array(pil_image))
 
         # Replace the background with plain white
-        enhanced_image = replace_background(upscaled)
+        background_replaced = replace_background(Image.fromarray(sharpened))
+
+        # Check resolution and decide whether to use ESRGAN
+        if background_replaced.size[0] > 1024 and background_replaced.size[1] > 1024:
+            logging.info("Skipping ESRGAN as the resolution is above 1024x1024.")
+            enhanced_image = background_replaced
+        else:
+            # Upscale the image using ESRGAN
+            with torch.no_grad():
+                enhanced_image = upscale_image_with_esrgan(background_replaced, esrgan_model)
 
         # Save the enhanced image
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
